@@ -58,7 +58,6 @@ summary{cursor:pointer}
 .nav a,.nav span{padding:3px 10px;border:1px solid var(--line);border-radius:999px;text-decoration:none;color:var(--acc);background:#fff}
 .nav span{background:var(--acc);color:#fff;border-color:var(--acc)}
 .tt td.n{text-align:right}
-</style>
 .sum{display:flex;flex-wrap:wrap;gap:10px;padding:8px 22px 0}
 .sum .card{padding:10px 14px;font-size:14px}.sum b{font-size:16px}
 .cwrap{margin:10px 22px;padding:10px 12px}
@@ -71,6 +70,9 @@ tr.prime td{background:#fff6dc;font-weight:600}
 .pos{color:var(--pos)}.neg{color:var(--neg)}.stale{color:#b26a00}
 .tblcard{margin:14px 22px;padding:10px 12px;overflow:auto}
 h2{font-size:15px;margin:2px 0 8px}
+.bars{display:grid;grid-template-columns:1fr 1fr;gap:14px;margin:0 22px}.bars .cwrap{margin:10px 0}
+.bc{height:640px}
+.pc{display:flex;gap:14px;align-items:center;min-width:420px}.pc .big{font-size:28px;font-weight:700}.pc .spark{width:170px;height:56px}
 </style>
 </head>
 <body>
@@ -80,6 +82,8 @@ h2{font-size:15px;margin:2px 0 8px}
   <div class="sub">Вредност на удел, промена од 14.10.2026 · All values in MKD · Source: Macedonian Stock Exchange (mse.mk) · <span id="meta"></span></div>
 </header>
 <div class="sum" id="sum"></div>
+<div class="bars"><div class="card cwrap"><h2>% change in NAV per unit since 14 Oct</h2><div id="barNav" class="bc"></div></div>
+<div class="card cwrap"><h2>% change in net assets since 14 Oct (inflows + performance)</h2><div id="barNa" class="bc"></div></div></div>
 <div class="card cwrap">
   <div class="bar"><span class="lbl">Fund type:</span><span class="seg" id="types"></span>
     <button id="selAll">Show all</button><button id="selPrime">Prime + peers only</button>
@@ -145,7 +149,17 @@ document.getElementById('meta').textContent=`${D.start} → ${last} · built ${D
 const PAL=['#7c8aa5','#5aa3c9','#8fb57a','#c98fb0','#b0a36a','#6fb3a8','#a58fc9','#c9a07c','#7fa0c9','#9aa5b1'];
 const PCOL={'Innovo-Status-Solar':'#d62728','Innovo-Status-Akcii':'#ff7f0e'};
 F.forEach((f,i)=>f.col=f.prime?PCOL[f.code]:PAL[i%PAL.length]);
-document.getElementById('sum').innerHTML=F.filter(f=>f.prime).map(f=>`<div class="card" style="border-left:5px solid ${f.col}"><b>${f.en}</b>: ${pct(f.chg)} since 14 Oct · rank <b>${f.prank} of ${f.pn}</b> ${f.type.toLowerCase()} funds · #${f.rank} of ${F.length} overall · latest ${f.d1}${f.d1<last?' <span class="stale">(behind '+last+')</span>':''}</div>`).join('');
+document.getElementById('sum').innerHTML=F.filter(f=>f.prime).map(f=>`<div class="card pc" style="border-left:6px solid ${f.col}"><div><b>${f.en}</b><div class="big ${f.chg>=0?'pos':'neg'}">${f.chg>=0?'+':''}${f.chg.toFixed(2)}%</div><div>since 14 Oct · rank <b>${f.prank} of ${f.pn}</b> ${f.type.toLowerCase()} funds · #${f.rank}/${F.length} overall</div><div class="sub">latest ${f.d1}${f.d1<last?' <span class="stale">(behind '+last+')</span>':''} · net assets ${pct(f.nachg)}</div></div><div class="spark" id="sp_${f.code}"></div></div>`).join('');
+F.filter(f=>f.prime).forEach(f=>{const c=echarts.init(document.getElementById('sp_'+f.code));
+  const d=f.raw.map(r=>[r[0],+((r[1]/f.p0-1)*100).toFixed(3)]);
+  c.setOption({animation:false,grid:{left:2,right:2,top:4,bottom:4},xAxis:{type:'category',show:false,data:d.map(x=>x[0])},yAxis:{type:'value',show:false,scale:true},
+    tooltip:{trigger:'axis',formatter:p=>p[0].axisValue+': '+p[0].value+'%'},series:[{type:'line',data:d.map(x=>x[1]),showSymbol:false,lineStyle:{width:2.5,color:f.col},areaStyle:{color:f.col,opacity:.12}}]});});
+const barNav=echarts.init(document.getElementById('barNav')),barNa=echarts.init(document.getElementById('barNa'));
+function bars(fs){[[barNav,'chg'],[barNa,'nachg']].forEach(([c,k])=>{const r=fs.filter(f=>f[k]!=null).sort((a,b)=>a[k]-b[k]);
+  c.setOption({animation:false,grid:{left:170,right:60,top:5,bottom:25},tooltip:{trigger:'axis',axisPointer:{type:'shadow'},formatter:p=>`${p[0].name}: ${p[0].value>=0?'+':''}${p[0].value.toFixed(2)}%`},
+    xAxis:{type:'value',axisLabel:{formatter:v=>v+'%'}},yAxis:{type:'category',data:r.map(f=>f.en),axisLabel:{fontSize:11}},
+    series:[{type:'bar',barMaxWidth:18,data:r.map(f=>({value:+f[k].toFixed(3),itemStyle:{color:f.prime?f.col:'#b3bac6'},label:{fontWeight:f.prime?'bold':'normal'}})),
+      label:{show:true,position:'right',fontSize:10.5,formatter:p=>(p.value>=0?'+':'')+p.value.toFixed(2)+'%'}}]},true);});}
 const chart=echarts.init(document.getElementById('chart'));
 let typ='All';
 const TYPES=['All',...new Set(F.map(f=>f.type))];
@@ -154,6 +168,7 @@ TYPES.forEach(t=>{const b=document.createElement('button');b.textContent=t;b.onc
 function draw(sel){
   [...tb.children].forEach(b=>b.classList.toggle('on',b.textContent===typ));
   const fs=F.filter(f=>typ==='All'||f.type===typ||f.prime);
+  bars(fs);
   chart.setOption({animation:false,grid:{left:55,right:250,top:20,bottom:40},
     tooltip:{trigger:'axis',confine:true,order:'valueDesc',formatter:ps=>{ps.sort((a,b)=>(b.value?.[1]??-1e9)-(a.value?.[1]??-1e9));
       return `<b>${ps[0].axisValue}</b><br>`+ps.filter(p=>p.data&&p.data.v).map(p=>`${p.marker}${p.data.prime?'<b>':''}${p.seriesName}${p.data.prime?'</b>':''}: ${fmt(p.data.v[0],4)} MKD · ${p.data.v[1]>=0?'+':''}${p.data.v[1].toFixed(2)}%${p.data.v[2]?' <i>(carried fwd)</i>':''}`).join('<br>');}},
@@ -183,7 +198,7 @@ const sel=[];F.filter(f=>f.prime).forEach(p=>{if(!sel.includes(p))sel.push(p);
   F.filter(g=>g.type===p.type&&!g.prime).sort((a,b)=>Math.abs(a.chg-p.chg)-Math.abs(b.chg-p.chg)).slice(0,2).forEach(g=>{if(!sel.includes(g))sel.push(g);});});
 document.getElementById('raw').innerHTML='<tr><th class="l">Date</th>'+sel.map(f=>`<th>${f.en}<br><span class="sub">${f.type}</span></th>`).join('')+'</tr>'+
   D.dates.map(d=>'<tr><td class="l">'+d+'</td>'+sel.map(f=>{const r=f.raw.find(x=>x[0]===d);return `<td${f.prime?' style="background:#fff6dc;font-weight:600"':''}>${r?fmt(r[1],4):'–'}</td>`;}).join('')+'</tr>').join('');
-addEventListener('resize',()=>chart.resize());
+addEventListener('resize',()=>[chart,barNav,barNa].forEach(c=>c.resize()));
 window.__chartReady=true;
 </script>
 </body>
